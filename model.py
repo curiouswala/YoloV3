@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 import yolo_decoder as yolo_model
+from midas.midas_decoder import MidasDecoder
 
 def _make_resnet_encoder(use_pretrained):
 	pretrained = _make_pretrained_resnext101_wsl(use_pretrained)
@@ -30,20 +31,8 @@ class Model_Head(nn.Module):
 
         super(Model_Head, self).__init__()
 
-        # self.pretrained, self.scratch= _make_encoder(backbone="resnext101_wsl", features=256, use_pretrained=True)
-        # self.scratch.refinenet4 = FeatureFusionBlock(features)
-        # self.scratch.refinenet3 = FeatureFusionBlock(features)
-        # self.scratch.refinenet2 = FeatureFusionBlock(features)
-        # self.scratch.refinenet1 = FeatureFusionBlock(features)
-        # self.scratch.output_conv = nn.Sequential(
-        #     nn.Conv2d(features, 128, kernel_size=3, stride=1, padding=1),
-        #     Interpolate(scale_factor=2, mode="bilinear"),
-        #     nn.Conv2d(128, 32, kernel_size=3, stride=1, padding=1),
-        #     nn.ReLU(True),
-        #     nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
-        #     nn.ReLU(True) if non_negative else nn.Identity(),
-        # )
         self.encoder = _make_resnet_encoder(True)
+        self.midas_decoder = MidasDecoder()
         self.yolo_conv1 = nn.Conv2d( 2048, 1024, 1, padding= 0)
         self.yolo_conv2 = nn.Conv2d( 1024, 512, 1, padding= 0)
         self.yolo_conv3 = nn.Conv2d( 512, 256, 1, padding= 0)
@@ -107,9 +96,8 @@ class Model_Head(nn.Module):
         else:
           yolo_out = self.yolo_decoder(Yolo_75,Yolo_61,Yolo_36)
 
-    # #   layer_1, layer_2, layer_3, layer_4 = self.midas_encoder(x)
-    #   # midas_out = self.midas_decoder(layer_1, layer_2, layer_3, layer_4)
+        midas_out = self.midas_decoder(layer_1, layer_2, layer_3, layer_4)
         # yolo_out = self.yolo_decoder(Yolo_75, Yolo_61,Yolo_36)
     #   # planer_out= self.planercnn_decoder(x)
-        return yolo_out
+        return yolo_out, midas_out
 
