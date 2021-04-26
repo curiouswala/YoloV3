@@ -1,7 +1,7 @@
 import argparse
 from sys import platform
-
-from models import *  # set ONNX_EXPORT in models.py
+from model import *
+from yolo_decoder import *  # set ONNX_EXPORT in models.py
 from utils.datasets import *
 from utils.utils import *
 
@@ -18,7 +18,7 @@ def detect(save_img=False):
     os.makedirs(out)  # make new output folder
 
     # Initialize model
-    model = Darknet(opt.cfg, img_size)
+    model = Model_Head(opt.cfg)
 
     # Load weights
     attempt_download(weights)
@@ -85,7 +85,7 @@ def detect(save_img=False):
 
         # Inference
         t1 = torch_utils.time_synchronized()
-        pred = model(img, augment=opt.augment)[0]
+        pred = model(img)[0]
         t2 = torch_utils.time_synchronized()
 
         # to float

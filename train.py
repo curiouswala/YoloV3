@@ -4,10 +4,13 @@ import torch.distributed as dist
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 
+from utils.parse_config import *
 import test  # import test.py to get mAP after each epoch
-from models import *
+from model import *
 from utils.datasets import *
 from utils.utils import *
+from yolo_decoder import *
+
 
 mixed_precision = True
 try:  # Mixed precision training https://github.com/NVIDIA/apex
@@ -88,7 +91,7 @@ def train():
         os.remove(f)
 
     # Initialize model
-    model = Darknet(cfg).to(device)
+    model = Model_Head(cfg).to(device)
 
     # Optimizer
     pg0, pg1, pg2 = [], [], []  # optimizer parameter groups
@@ -119,7 +122,7 @@ def train():
 
         # load model
         try:
-            chkpt['model'] = {k: v for k, v in chkpt['model'].items() if model.state_dict()[k].numel() == v.numel()}
+            # chkpt['model'] = {k: v for k, v in chkpt['model'].items() if model.state_dict()[k].numel() == v.numel()}
             model.load_state_dict(chkpt['model'], strict=False)
         except KeyError as e:
             s = "%s is not compatible with %s. Specify --weights '' or specify a --cfg compatible with %s. " \
@@ -195,7 +198,7 @@ def train():
     testloader = torch.utils.data.DataLoader(LoadImagesAndLabels(test_path, imgsz_test, batch_size,
                                                                  hyp=hyp,
                                                                  rect=True,
-                                                                 cache_images=opt.cache_images,
+                                                                 cache_images=False,
                                                                  single_cls=opt.single_cls),
                                              batch_size=batch_size,
                                              num_workers=nw,
@@ -279,14 +282,14 @@ def train():
                 loss.backward()
 
             # Optimize accumulated gradient
-            if ni % accumulate == 0:
-                optimizer.step()
-                optimizer.zero_grad()
-                ema.update(model)
+            #if ni % accumulate == 0:
+            optimizer.step()
+             #   optimizer.zero_grad()
+             #   ema.update(model)
 
             # Print batch results
             mloss = (mloss * i + loss_items) / (i + 1)  # update mean losses
-            mem = '%.3gG' % (torch.cuda.memory_cached() / 1E9 if torch.cuda.is_available() else 0)  # (GB)
+            mem = '%.3gG' % (torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0)  # (GB)
             s = ('%10s' * 2 + '%10.3g' * 6) % ('%g/%g' % (epoch, epochs - 1), mem, *mloss, len(targets), img_size)
             pbar.set_description(s)
 

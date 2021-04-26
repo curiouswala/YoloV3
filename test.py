@@ -1,12 +1,13 @@
+
 import argparse
 import json
 
 from torch.utils.data import DataLoader
 
-from models import *
+from yolo_decoder import *
 from utils.datasets import *
 from utils.utils import *
-
+from model import *
 
 def test(cfg,
          data,
@@ -70,7 +71,7 @@ def test(cfg,
 
     seen = 0
     model.eval()
-    _ = model(torch.zeros((1, 3, img_size, img_size), device=device)) if device.type != 'cpu' else None  # run once
+#    _ = model(torch.zeros((1, 3, img_size, img_size), device=device)) if device.type != 'cpu' else None  # run once
     coco91class = coco80_to_coco91_class()
     s = ('%20s' + '%10s' * 6) % ('Class', 'Images', 'Targets', 'P', 'R', 'mAP@0.5', 'F1')
     p, r, f1, mp, mr, map, mf1, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
@@ -91,7 +92,7 @@ def test(cfg,
         with torch.no_grad():
             # Run model
             t = torch_utils.time_synchronized()
-            inf_out, train_out = model(imgs, augment=augment)  # inference and training outputs
+            inf_out, train_out = model.forward(imgs)  # inference and training outputs
             t0 += torch_utils.time_synchronized() - t
 
             # Compute loss
@@ -262,3 +263,4 @@ if __name__ == '__main__':
             ax[i].set_xlabel('iou_thr')
         fig.tight_layout()
         plt.savefig('study.jpg', dpi=200)
+
