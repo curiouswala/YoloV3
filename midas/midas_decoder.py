@@ -1,3 +1,6 @@
+import torch
+import torch.nn as nn
+from midas.blocks import FeatureFusionBlock, Interpolate, _make_encoder
 
 class MidasDecoder(nn.Module):
     def __init__(self, path=None, features=256, non_negative=True):
@@ -25,10 +28,10 @@ class MidasDecoder(nn.Module):
 
     def forward(self, layer1, layer2, layer3, layer4):
         ## Midas_branch
-        midas_layer_1_rn = self.scratch.layer1_rn(layer_1)
-        midas_layer_2_rn = self.scratch.layer2_rn(layer_2)
-        midas_layer_3_rn = self.scratch.layer3_rn(layer_3)
-        midas_layer_4_rn = self.scratch.layer4_rn(layer_4)
+        midas_layer_1_rn = self.scratch.layer1_rn(layer1)
+        midas_layer_2_rn = self.scratch.layer2_rn(layer2)
+        midas_layer_3_rn = self.scratch.layer3_rn(layer3)
+        midas_layer_4_rn = self.scratch.layer4_rn(layer4)
 
         midas_path_4 = self.scratch.refinenet4(midas_layer_4_rn)
         midas_path_3 = self.scratch.refinenet3(midas_path_4, midas_layer_3_rn)

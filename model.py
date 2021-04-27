@@ -48,20 +48,10 @@ class Model_Head(nn.Module):
         return layer_1, layer_2, layer_3, layer_4
 
 
-    def midas_decoder(self, layer_1, layer_2, layer_3, layer_4):
-        ## Midas_branch
-        midas_layer_1_rn = self.scratch.layer1_rn(layer_1)
-        midas_layer_2_rn = self.scratch.layer2_rn(layer_2)
-        midas_layer_3_rn = self.scratch.layer3_rn(layer_3)
-        midas_layer_4_rn = self.scratch.layer4_rn(layer_4)
+    # def midas_decoder(self, layer_1, layer_2, layer_3, layer_4):
 
-        midas_path_4 = self.scratch.refinenet4(midas_layer_4_rn)
-        midas_path_3 = self.scratch.refinenet3(midas_path_4, midas_layer_3_rn)
-        midas_path_2 = self.scratch.refinenet2(midas_path_3, midas_layer_2_rn)
-        midas_path_1 = self.scratch.refinenet1(midas_path_2, midas_layer_1_rn)
-
-        midas_out = self.scratch.output_conv(midas_path_1)
-        return torch.squeeze(midas_out, dim=1)
+    #     midas_out = self.scratch.output_conv(midas_path_1)
+    #     return torch.squeeze(midas_out, dim=1)
 
     # def yolo_decoder(self,Yolo_36, Yolo_61, Yolo_75):
     #     ## Yolo_branch
@@ -80,7 +70,8 @@ class Model_Head(nn.Module):
         planer_out= maskrcnn(x, layers)
         return planer_out
 
-    def forward(self, x):
+    def forward(self, yolo_inp, midas_inp):
+        x = yolo_inp
         layer_1 = self.encoder.layer1(x)
         layer_2 = self.encoder.layer2(layer_1)
         layer_3 = self.encoder.layer3(layer_2)

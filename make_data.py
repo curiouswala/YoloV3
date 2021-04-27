@@ -43,6 +43,7 @@ from midas.transforms import Resize, NormalizeImage, PrepareForNet
 class load_data(Dataset):
     #merge LoadImagesAndLabels from yolo and InferenceDataset from planercnn 
     def __init__(self,yolo_params,midas_params):
+        self.random = True
         #planercnn_params : self, options, config, image_list, camera, random=False
         #yolo_params : self, path, img_size=416, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
         #        cache_labels=True, cache_images=False, single_cls=False
@@ -136,16 +137,16 @@ class load_data(Dataset):
         self.mosaic = False #self.augment and not self.rect  # load 4 images at a time into a mosaic (only during training)
 
         # Define labels
-        self.label_files=[]
-        for x in self.img_files:
-            x = x.split(os.sep)
-            x[3]= 'labels'
-            x[4] = x[4].replace(os.path.splitext(x[4])[-1], '.txt')
-            x = os.sep.join(x)
-            self.label_files.append(x)
+        # self.label_files=[]
+        # for x in self.img_files:
+        #     x = x.split(os.sep)
+        #     x[3]= 'labels'
+        #     x[4] = x[4].replace(os.path.splitext(x[4])[-1], '.txt')
+        #     x = os.sep.join(x)
+        #     self.label_files.append(x)
 
-        #self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
-        #                    for x in self.img_files]
+        self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
+                           for x in self.img_files]
 
         # Rectangular Training  https://github.com/ultralytics/yolov3/issues/232
         if self.rect:
@@ -279,7 +280,7 @@ class load_data(Dataset):
             im = os.sep.join(im)
             self.depth_names.append(im)
 
-        #self.depth_names = [x.replace('images', 'depth_images').replace(os.path.splitext(x)[-1], '.png') for x in self.img_files]
+        # self.depth_names = [x.replace('images', 'depth_images').replace(os.path.splitext(x)[-1], '.png') for x in self.img_files]
         #self.img_path = inp_path
         #self.depth_path = depth_path
         self.transform = Compose(
