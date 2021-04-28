@@ -41,41 +41,38 @@ from midas.transforms import Resize, NormalizeImage, PrepareForNet
 
 
 class load_data(Dataset):
-    #merge LoadImagesAndLabels from yolo and InferenceDataset from planercnn 
-    def __init__(self,yolo_params,midas_params):
+    # Code taken from LoadImagesAndLabels(yolo) and InferenceDataset (planercnn) 
+    def __init__(self,planercnn_params, yolo_params,midas_params):
         self.random = True
-        #planercnn_params : self, options, config, image_list, camera, random=False
-        #yolo_params : self, path, img_size=416, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
-        #        cache_labels=True, cache_images=False, single_cls=False
-
+       
         ## InferenceDataset start
         
-
-#        self.options = planercnn_params['options']
-#        self.config = planercnn_params['config']
-#        self.random = planercnn_params['random']
+        self.options = planercnn_params['options']
+        self.config = planercnn_params['config']
+        self.random = planercnn_params['random']
         #self.camera = camera
         #self.imagePaths = image_list
-        # self.anchors = generate_pyramid_anchors(self.config.RPN_ANCHOR_SCALES,
-        #                                               self.config.RPN_ANCHOR_RATIOS,
-        #                                               self.config.BACKBONE_SHAPES,
-        #                                               self.config.BACKBONE_STRIDES,
-        #                                               self.config.RPN_ANCHOR_STRIDE)
+        self.anchors = generate_pyramid_anchors(self.config.RPN_ANCHOR_SCALES,
+                                                      self.config.RPN_ANCHOR_RATIOS,
+                                                      self.config.BACKBONE_SHAPES,
+                                                      self.config.BACKBONE_STRIDES,
+                                                      self.config.RPN_ANCHOR_STRIDE)
 
-        # if os.path.exists(self.options.customDataFolder + '/camera.txt'):
-        #     self.camera = np.zeros(6)
-        #     with open(self.options.customDataFolder + '/camera.txt', 'r') as f:
-        #         for line in f:
-        #             values = [float(token.strip()) for token in line.split(' ') if token.strip() != '']
-        #             for c in range(6):
-        #                 self.camera[c] = values[c]
-        #                 continue
-        #             break
-        #         pass
-        # else:
-        #     self.camera = [filename.replace('.png', '.txt').replace('.jpg', '.txt') for filename in image_list]
-        #     pass
+        if os.path.exists(self.options.customDataFolder + '/camera.txt'):
+            self.camera = np.zeros(6)
+            with open(self.options.customDataFolder + '/camera.txt', 'r') as f:
+                for line in f:
+                    values = [float(token.strip()) for token in line.split(' ') if token.strip() != '']
+                    for c in range(6):
+                        self.camera[c] = values[c]
+                        continue
+                    break
+                pass
+        else:
+            self.camera = [filename.replace('.png', '.txt').replace('.jpg', '.txt') for filename in image_list]
+            pass
         #return
+        
         ## InferenceDataset END
 
         ## Yolo LoadImagesAndLabels Start
@@ -273,8 +270,7 @@ class load_data(Dataset):
         ## Yolo LoadImagesAndLabels END
 
 
-        # midas params : inp_path,depth_path
-        # midas dataset start
+
         self.depth_names=[]
         for im in self.img_files:
             im = im.split(os.sep)
@@ -360,163 +356,163 @@ class load_data(Dataset):
         # midas dataset end
 
 
-        # imagePath = self.imagePaths[index]
-        # image = cv2.imread(imagePath)
-        # orig_image = image.copy()
-        # extrinsics = np.eye(4, dtype=np.float32)
+        imagePath = self.imagePaths[index]
+        image = cv2.imread(imagePath)
+        orig_image = image.copy()
+        extrinsics = np.eye(4, dtype=np.float32)
 
-        # if isinstance(self.camera, list):
-        #     if isinstance(self.camera[index], str):
-        #         camera = np.zeros(6)
-        #         with open(self.camera[index], 'r') as f:
-        #             for line in f:
-        #                 values = [float(token.strip()) for token in line.split(' ') if token.strip() != '']
-        #                 for c in range(6):
-        #                     camera[c] = values[c]
-        #                     continue
-        #                 break
-        #             pass
-        #     else:
-        #         camera = self.camera[index]
-        #         pass
-        # elif len(self.camera) == 6:
-        #     camera = self.camera
-        # else:
-        #     assert(False)
-        #     pass
+        if isinstance(self.camera, list):
+            if isinstance(self.camera[index], str):
+                camera = np.zeros(6)
+                with open(self.camera[index], 'r') as f:
+                    for line in f:
+                        values = [float(token.strip()) for token in line.split(' ') if token.strip() != '']
+                        for c in range(6):
+                            camera[c] = values[c]
+                            continue
+                        break
+                    pass
+            else:
+                camera = self.camera[index]
+                pass
+        elif len(self.camera) == 6:
+            camera = self.camera
+        else:
+            assert(False)
+            pass
 
-        # image = cv2.resize(image, (512, 256), interpolation=cv2.INTER_LINEAR)
-        # camera[[0, 2, 4]] *= 512.0 / camera[4]        
-        # camera[[1, 3, 5]] *= 256.0 / camera[5]
+        image = cv2.resize(image, (512, 256), interpolation=cv2.INTER_LINEAR)
+        camera[[0, 2, 4]] *= 512.0 / camera[4]        
+        camera[[1, 3, 5]] *= 256.0 / camera[5]
 
-        # ## The below codes just fill in dummy values for all other data entries which are not used for inference. You can ignore everything except some preprocessing operations on "image".
-        # depth = np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), dtype=np.float32)
-        # # used midas depth for planer depth
-        # #print('depth_img',depth_img.shape)
-        # #depth = torch.nn.functional.interpolate(torch.from_numpy(depth_img).unsqueeze(0).unsqueeze(1), size=(self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), mode="bicubic",align_corners=False).numpy()
-        # #depth = cv2.resize(depth_img, dsize=(self.config.IMAGE_MAX_DIM,self.config.IMAGE_MIN_DIM), interpolation=cv2.INTER_CUBIC)
-        # segmentation = np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), dtype=np.int32)
-
-
-        # planes = np.zeros((segmentation.max() + 1, 3))
-
-        # instance_masks = []
-        # class_ids = []
-        # parameters = []
-
-        # if len(planes) > 0:
-        #     if 'joint' in self.config.ANCHOR_TYPE:
-        #         distances = np.linalg.norm(np.expand_dims(planes, 1) - self.config.ANCHOR_PLANES, axis=-1)
-        #         plane_anchors = distances.argmin(-1)
-        #     elif self.config.ANCHOR_TYPE == 'Nd':
-        #         plane_offsets = np.linalg.norm(planes, axis=-1)
-        #         plane_normals = planes / np.expand_dims(plane_offsets, axis=-1)
-        #         distances_N = np.linalg.norm(np.expand_dims(plane_normals, 1) - self.config.ANCHOR_NORMALS, axis=-1)
-        #         normal_anchors = distances_N.argmin(-1)
-        #         distances_d = np.abs(np.expand_dims(plane_offsets, -1) - self.config.ANCHOR_OFFSETS)
-        #         offset_anchors = distances_d.argmin(-1)
-        #     elif self.config.ANCHOR_TYPE in ['normal', 'patch']:
-        #         plane_offsets = np.linalg.norm(planes, axis=-1)
-        #         plane_normals = planes / np.maximum(np.expand_dims(plane_offsets, axis=-1), 1e-4)
-        #         distances_N = np.linalg.norm(np.expand_dims(plane_normals, 1) - self.config.ANCHOR_NORMALS, axis=-1)
-        #         normal_anchors = distances_N.argmin(-1)
-        #     elif self.config.ANCHOR_TYPE == 'normal_none':
-        #         plane_offsets = np.linalg.norm(planes, axis=-1)
-        #         plane_normals = planes / np.expand_dims(plane_offsets, axis=-1)
-        #         pass
-        #     pass
-
-        # for planeIndex, plane in enumerate(planes):
-        #     m = segmentation == planeIndex
-        #     if m.sum() < 1:
-        #         continue
-        #     instance_masks.append(m)
-        #     if self.config.ANCHOR_TYPE == 'none':
-        #         class_ids.append(1)
-        #         parameters.append(np.concatenate([plane, np.zeros(1)], axis=0))
-        #     elif 'joint' in self.config.ANCHOR_TYPE:
-        #         class_ids.append(plane_anchors[planeIndex] + 1)
-        #         residual = plane - self.config.ANCHOR_PLANES[plane_anchors[planeIndex]]
-        #         parameters.append(np.concatenate([residual, np.array([0, plane_info[planeIndex][-1]])], axis=0))
-        #     elif self.config.ANCHOR_TYPE == 'Nd':
-        #         class_ids.append(normal_anchors[planeIndex] * len(self.config.ANCHOR_OFFSETS) + offset_anchors[planeIndex] + 1)
-        #         normal = plane_normals[planeIndex] - self.config.ANCHOR_NORMALS[normal_anchors[planeIndex]]
-        #         offset = plane_offsets[planeIndex] - self.config.ANCHOR_OFFSETS[offset_anchors[planeIndex]]
-        #         parameters.append(np.concatenate([normal, np.array([offset])], axis=0))
-        #     elif self.config.ANCHOR_TYPE == 'normal':
-        #         class_ids.append(normal_anchors[planeIndex] + 1)
-        #         normal = plane_normals[planeIndex] - self.config.ANCHOR_NORMALS[normal_anchors[planeIndex]]
-        #         parameters.append(np.concatenate([normal, np.zeros(1)], axis=0))
-        #     elif self.config.ANCHOR_TYPE == 'normal_none':
-        #         class_ids.append(1)
-        #         normal = plane_normals[planeIndex]
-        #         parameters.append(np.concatenate([normal, np.zeros(1)], axis=0))
-        #     else:
-        #         assert(False)
-        #         pass
-        #     continue
-
-        # parameters = np.array(parameters)
-        # mask = np.stack(instance_masks, axis=2)
-        # class_ids = np.array(class_ids, dtype=np.int32)
-
-        # image, image_metas, gt_class_ids, gt_boxes, gt_masks, gt_parameters = load_image_gt(self.config, index, image, depth, mask, class_ids, parameters, augment=False)
-
-        # ## RPN Targets
-        # rpn_match, rpn_bbox = build_rpn_targets(image.shape, self.anchors,
-        #                                         gt_class_ids, gt_boxes, self.config)
-
-        # ## If more instances than fits in the array, sub-sample from them.
-        # if gt_boxes.shape[0] > self.config.MAX_GT_INSTANCES:
-        #     ids = np.random.choice(
-        #         np.arange(gt_boxes.shape[0]), self.config.MAX_GT_INSTANCES, replace=False)
-        #     gt_class_ids = gt_class_ids[ids]
-        #     gt_boxes = gt_boxes[ids]
-        #     gt_masks = gt_masks[:, :, ids]
-        #     gt_parameters = gt_parameters[ids]
-        #     pass
-
-        # ## Add to batch
-        # rpn_match = rpn_match[:, np.newaxis]
-        # image = mold_image(image.astype(np.float32), self.config)
-
-        # depth = np.concatenate([np.zeros((64, 512)), depth, np.zeros((64, 512))], axis=0).astype(np.float32)
-        # segmentation = np.concatenate([np.full((64, 512), fill_value=-1), segmentation, np.full((64, 512), fill_value=-1)], axis=0).astype(np.float32)
-
-        # data_pair = [image.transpose((2, 0, 1)).astype(np.float32), image_metas, rpn_match.astype(np.int32), rpn_bbox.astype(np.float32), gt_class_ids.astype(np.int32), gt_boxes.astype(np.float32), gt_masks.transpose((2, 0, 1)).astype(np.float32), gt_parameters[:, :-1].astype(np.float32), depth.astype(np.float32), extrinsics.astype(np.float32), planes.astype(np.float32), segmentation.astype(np.int64), gt_parameters[:, -1].astype(np.int32)]
-        # data_pair = data_pair + data_pair
-
-        # data_pair.append(np.zeros(7, np.float32))
-
-        # data_pair.append(planes)
-        # data_pair.append(planes)
-        # data_pair.append(np.zeros((len(planes), len(planes))))
-        # data_pair.append(camera.astype(np.float32))
-
-        # plane_name = self.plane_names[index]
-        # plane_img = cv2.imread(plane_name)
         
-        # if plane_img is None:
-        #     plane_img = np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM,3), dtype=np.int32)
-        # #plane_img = cv2.cvtColor(plane_img, cv2.COLOR_BGR2GRAY)
-        # #plane_img=0
-        # plane_np_name = self.plane_nps[index]
-        # try:
-        #     plane_np = np.load(plane_np_name)
-        # except:
-        #     plane_np = {'plane_parameters':np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), dtype=np.int32) ,'plane_masks':np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), dtype=np.int32)}
-
-        # plane_data = [data_pair,plane_img,plane_np]
+        depth = np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), dtype=np.float32)
+        # used midas depth for planer depth
+        #print('depth_img',depth_img.shape)
+        #depth = torch.nn.functional.interpolate(torch.from_numpy(depth_img).unsqueeze(0).unsqueeze(1), size=(self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), mode="bicubic",align_corners=False).numpy()
+        #depth = cv2.resize(depth_img, dsize=(self.config.IMAGE_MAX_DIM,self.config.IMAGE_MIN_DIM), interpolation=cv2.INTER_CUBIC)
+        segmentation = np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), dtype=np.int32)
 
 
+        planes = np.zeros((segmentation.max() + 1, 3))
+
+        instance_masks = []
+        class_ids = []
+        parameters = []
+
+        if len(planes) > 0:
+            if 'joint' in self.config.ANCHOR_TYPE:
+                distances = np.linalg.norm(np.expand_dims(planes, 1) - self.config.ANCHOR_PLANES, axis=-1)
+                plane_anchors = distances.argmin(-1)
+            elif self.config.ANCHOR_TYPE == 'Nd':
+                plane_offsets = np.linalg.norm(planes, axis=-1)
+                plane_normals = planes / np.expand_dims(plane_offsets, axis=-1)
+                distances_N = np.linalg.norm(np.expand_dims(plane_normals, 1) - self.config.ANCHOR_NORMALS, axis=-1)
+                normal_anchors = distances_N.argmin(-1)
+                distances_d = np.abs(np.expand_dims(plane_offsets, -1) - self.config.ANCHOR_OFFSETS)
+                offset_anchors = distances_d.argmin(-1)
+            elif self.config.ANCHOR_TYPE in ['normal', 'patch']:
+                plane_offsets = np.linalg.norm(planes, axis=-1)
+                plane_normals = planes / np.maximum(np.expand_dims(plane_offsets, axis=-1), 1e-4)
+                distances_N = np.linalg.norm(np.expand_dims(plane_normals, 1) - self.config.ANCHOR_NORMALS, axis=-1)
+                normal_anchors = distances_N.argmin(-1)
+            elif self.config.ANCHOR_TYPE == 'normal_none':
+                plane_offsets = np.linalg.norm(planes, axis=-1)
+                plane_normals = planes / np.expand_dims(plane_offsets, axis=-1)
+                pass
+            pass
+
+        for planeIndex, plane in enumerate(planes):
+            m = segmentation == planeIndex
+            if m.sum() < 1:
+                continue
+            instance_masks.append(m)
+            if self.config.ANCHOR_TYPE == 'none':
+                class_ids.append(1)
+                parameters.append(np.concatenate([plane, np.zeros(1)], axis=0))
+            elif 'joint' in self.config.ANCHOR_TYPE:
+                class_ids.append(plane_anchors[planeIndex] + 1)
+                residual = plane - self.config.ANCHOR_PLANES[plane_anchors[planeIndex]]
+                parameters.append(np.concatenate([residual, np.array([0, plane_info[planeIndex][-1]])], axis=0))
+            elif self.config.ANCHOR_TYPE == 'Nd':
+                class_ids.append(normal_anchors[planeIndex] * len(self.config.ANCHOR_OFFSETS) + offset_anchors[planeIndex] + 1)
+                normal = plane_normals[planeIndex] - self.config.ANCHOR_NORMALS[normal_anchors[planeIndex]]
+                offset = plane_offsets[planeIndex] - self.config.ANCHOR_OFFSETS[offset_anchors[planeIndex]]
+                parameters.append(np.concatenate([normal, np.array([offset])], axis=0))
+            elif self.config.ANCHOR_TYPE == 'normal':
+                class_ids.append(normal_anchors[planeIndex] + 1)
+                normal = plane_normals[planeIndex] - self.config.ANCHOR_NORMALS[normal_anchors[planeIndex]]
+                parameters.append(np.concatenate([normal, np.zeros(1)], axis=0))
+            elif self.config.ANCHOR_TYPE == 'normal_none':
+                class_ids.append(1)
+                normal = plane_normals[planeIndex]
+                parameters.append(np.concatenate([normal, np.zeros(1)], axis=0))
+            else:
+                assert(False)
+                pass
+            continue
+
+        parameters = np.array(parameters)
+        mask = np.stack(instance_masks, axis=2)
+        class_ids = np.array(class_ids, dtype=np.int32)
+
+        image, image_metas, gt_class_ids, gt_boxes, gt_masks, gt_parameters = load_image_gt(self.config, index, image, depth, mask, class_ids, parameters, augment=False)
+
+        ## RPN Targets
+        rpn_match, rpn_bbox = build_rpn_targets(image.shape, self.anchors,
+                                                gt_class_ids, gt_boxes, self.config)
+
+        ## If more instances than fits in the array, sub-sample from them.
+        if gt_boxes.shape[0] > self.config.MAX_GT_INSTANCES:
+            ids = np.random.choice(
+                np.arange(gt_boxes.shape[0]), self.config.MAX_GT_INSTANCES, replace=False)
+            gt_class_ids = gt_class_ids[ids]
+            gt_boxes = gt_boxes[ids]
+            gt_masks = gt_masks[:, :, ids]
+            gt_parameters = gt_parameters[ids]
+            pass
+
+        ## Add to batch
+        rpn_match = rpn_match[:, np.newaxis]
+        image = mold_image(image.astype(np.float32), self.config)
+
+        depth = np.concatenate([np.zeros((64, 512)), depth, np.zeros((64, 512))], axis=0).astype(np.float32)
+        segmentation = np.concatenate([np.full((64, 512), fill_value=-1), segmentation, np.full((64, 512), fill_value=-1)], axis=0).astype(np.float32)
+
+        data_pair = [image.transpose((2, 0, 1)).astype(np.float32), image_metas, rpn_match.astype(np.int32), rpn_bbox.astype(np.float32), gt_class_ids.astype(np.int32), gt_boxes.astype(np.float32), gt_masks.transpose((2, 0, 1)).astype(np.float32), gt_parameters[:, :-1].astype(np.float32), depth.astype(np.float32), extrinsics.astype(np.float32), planes.astype(np.float32), segmentation.astype(np.int64), gt_parameters[:, -1].astype(np.int32)]
+        data_pair = data_pair + data_pair
+
+        data_pair.append(np.zeros(7, np.float32))
+
+        data_pair.append(planes)
+        data_pair.append(planes)
+        data_pair.append(np.zeros((len(planes), len(planes))))
+        data_pair.append(camera.astype(np.float32))
+
+        plane_name = self.plane_names[index]
+        plane_img = cv2.imread(plane_name)
+        
+        if plane_img is None:
+            plane_img = np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM,3), dtype=np.int32)
+        #plane_img = cv2.cvtColor(plane_img, cv2.COLOR_BGR2GRAY)
+        #plane_img=0
+        plane_np_name = self.plane_nps[index]
+        try:
+            plane_np = np.load(plane_np_name)
+        except:
+            plane_np = {'plane_parameters':np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), dtype=np.int32) ,'plane_masks':np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), dtype=np.int32)}
+
+        plane_data = [data_pair,plane_img,plane_np]
 
 
-        #return data_pair
-        ## InferenceDataset END
 
-        ## Yolo LoadImagesAndLabels START
 
-        #if self.image_weights:
+        # return data_pair
+        # InferenceDataset END
+
+        # Yolo LoadImagesAndLabels START
+
+        # if self.image_weights:
         #    index = self.indices[index]
 
         hyp = self.hyp
@@ -601,34 +597,31 @@ class load_data(Dataset):
         yolo_item=[torch.from_numpy(img), labels_out, self.img_files[index], shapes]
 
         ## Yolo LoadImagesAndLabels END
-        print
-        
-        #print('plane:',len(data_pair))
-        #print('yolo:',len(yolo_item))
-        #print('depth:',len(data))
 
-        return yolo_item,dp_data
+
+        return plane_data,yolo_item,dp_data
 
     @staticmethod
     def collate_fn(batch):
 
         # print('len batch',len(batch))
 
-        yolo_item,dp_item = zip(*batch)
+        plane_item, yolo_item,dp_item = zip(*batch)
         
         up_depth=[]
-        # if len(batch) > 1:
-        #     for i in range(len(batch)):
-        # #         # up_plane.append(plane_item[i][0])
-        #         up_depth.append(dp_item[i][0])
-        # else:
-        #     # up_plane = plane_item[0]
-        up_depth = dp_item[0]
+        up_plane=[]
+        if len(batch) > 1:
+            for i in range(len(batch)):
+                up_plane.append(plane_item[i][0])
+                up_depth.append(dp_item[i][0])
+        else:
+            up_plane = plane_item[0]
+            up_depth = dp_item[0]
         # print(up_depth, "Hey father")
 
-        # for p in range(31):
-        #     up_plane[0][p] = torch.from_numpy(up_plane[0][p]).unsqueeze(0)
-        # up_plane[1] = torch.from_numpy(up_plane[1])
+        for p in range(31):
+            up_plane[0][p] = torch.from_numpy(up_plane[0][p]).unsqueeze(0)
+        up_plane[1] = torch.from_numpy(up_plane[1])
 
 
         # print('plane item:',len(plane_item[0]))
@@ -643,7 +636,7 @@ class load_data(Dataset):
         yolo_item = [torch.stack(img, 0), torch.cat(label, 0), path, shapes]
 
         print(len(up_depth), "Hey sister")
-        return yolo_item,up_depth
+        return up_plane,yolo_item,up_depth
 
     def __len__(self):
         return len(self.img_files)

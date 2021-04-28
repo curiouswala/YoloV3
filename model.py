@@ -3,6 +3,7 @@ import torch.nn as nn
 
 import yolo_decoder as yolo_model
 from midas.midas_decoder import MidasDecoder
+from planercnn.planercnn_decoder import MaskRCNN
 
 def _make_resnet_encoder(use_pretrained):
 	pretrained = _make_pretrained_resnext101_wsl(use_pretrained)
@@ -27,7 +28,7 @@ def _make_pretrained_resnext101_wsl(use_pretrained):
 	return _make_resnet_backbone(resnet)
 
 class Model_Head(nn.Module):
-    def __init__(self, cfg ,non_negative=True):
+    def __init__(self, cfg , planercfg ,non_negative=True):
 
         super(Model_Head, self).__init__()
 
@@ -39,13 +40,16 @@ class Model_Head(nn.Module):
       
         self.yolo_decoder=yolo_model.Darknet(cfg)
 
-    def midas_encoder(self, x):
-        ##  encoder head
-        layer_1 = self.pretrained.layer1(x)
-        layer_2 = self.pretrained.layer2(layer_1)
-        layer_3 = self.pretrained.layer3(layer_2)
-        layer_4 = self.pretrained.layer4(layer_3)
-        return layer_1, layer_2, layer_3, layer_4
+        self.planer_decoder= MaskRCNN(planercfg)
+
+
+    # def midas_encoder(self, x):
+    #     ##  encoder head
+    #     layer_1 = self.pretrained.layer1(x)
+    #     layer_2 = self.pretrained.layer2(layer_1)
+    #     layer_3 = self.pretrained.layer3(layer_2)
+    #     layer_4 = self.pretrained.layer4(layer_3)
+    #     return layer_1, layer_2, layer_3, layer_4
 
 
     # def midas_decoder(self, layer_1, layer_2, layer_3, layer_4):
@@ -62,16 +66,19 @@ class Model_Head(nn.Module):
     #     yolo_out= self.yolo_decoder_old.forward( Yolo_75, Yolo_61,Yolo_36 )
     #     return yolo_out
 
-    def planercnn_decoder(self,x):
+    # def planercnn_decoder(self,x):
         
-        layer_1, layer_2, layer_3, layer_4= self.midas_encoder(x)
-        layers= [layer_1, layer_2, layer_3, layer_4]
+    #     layer_1, layer_2, layer_3, layer_4= self.midas_encoder(x)
+    #     layers= [layer_1, layer_2, layer_3, layer_4]
 
-        planer_out= maskrcnn(x, layers)
-        return planer_out
+    #     planer_out= maskrcnn(x, layers)
+    #     return planer_out
 
-    def forward(self, yolo_inp, midas_inp):
+    def forward(self, plane_inp,yolo_inp):
+        
         x = yolo_inp
+        plane_inp['input'][0] = yolo_inp
+
         layer_1 = self.encoder.layer1(x)
         layer_2 = self.encoder.layer2(layer_1)
         layer_3 = self.encoder.layer3(layer_2)
@@ -88,7 +95,10 @@ class Model_Head(nn.Module):
           yolo_out = self.yolo_decoder(Yolo_75,Yolo_61,Yolo_36)
 
         midas_out = self.midas_decoder(layer_1, layer_2, layer_3, layer_4)
-        # yolo_out = self.yolo_decoder(Yolo_75, Yolo_61,Yolo_36)
-    #   # planer_out= self.planercnn_decoder(x)
-        return yolo_out, midas_out
 
+        
+        # yolo_out = self.yolo_decoder(Yolo_75, Yolo_61,Yolo_36)
+
+        
+        planer_out= self.planer_decoder.forward(plane_inp, layer_1, layer_2, layer_3, layer_4)
+        return  planer_out, yolo_out, midas_out

@@ -4,17 +4,19 @@ import torch.distributed as dist
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.autograd import Variable
-from utils.parse_config import *
+from utils.parse_config import 
 import test  # import test.py to get mAP after each epoch
 from model import *
 from utils.datasets import *
 from utils.utils import *
 from yolo_decoder import *
 from make_data import *
-
 import pytorch_ssim
-
-
+from planercnn.config import InferenceConfig
+from planercnn.utils import *
+from planercnn.visualize_utils import *
+from planercnn.evaluate_utils import *
+from planercnn.planercnn_decoder import *
 
 
 
@@ -63,15 +65,20 @@ if hyp['fl_gamma']:
     print('Using FocalLoss(gamma=%g)' % hyp['fl_gamma'])
 
 
-def train():
+def train(plane_parse_args,yolo_parse_args,midas_parse_args):
+    #For yolo
+    opt= yolo_args
     cfg = opt.cfg
     data = opt.data
     epochs = opt.epochs  # 500200 batches at bs 64, 117263 images = 273 epochs
     batch_size = opt.batch_size
     accumulate = opt.accumulate  # effective bs = batch_size * accumulate = 16 * 4 = 64
     weights = opt.weights  # initial yolo training weights
-    midas_weights = opt.midasweights 
     imgsz_min, imgsz_max, imgsz_test = opt.img_size  # img sizes (min, max, test)
+    
+    #For Planercnn
+    opt_plane= plane_parse_args
+    planercfg= InferenceConfig(opt_plane)
 
     # Image Sizes
     gs = 64  # (pixels) grid size
@@ -98,7 +105,7 @@ def train():
         os.remove(f)
 
     # Initialize model
-    model = Model_Head(cfg).to(device)
+    model = Model_Head(cfg= cfg, planercfg=planercfg ).to(device)
 
     # Optimizer
     pg0, pg1, pg2 = [], [], []  # optimizer parameter groups
@@ -152,13 +159,18 @@ def train():
     elif len(weights) > 0:  # darknet format
         # possible weights are '*.weights', 'yolov3-tiny.conv.15',  'darknet53.conv.74' etc.
         load_darknet_weights(model, weights)
+
     
-    midas_params= torch.load(midas_weights) # Midas weights 
+    
+    midas_params= torch.load(midas_args.weights) # Midas weights 
     
     if "optimizer" in midas_params:
         midas_params = midas_params["model"]
 
     model.load_state_dict(midas_params,strict=False)
+
+
+    model.load_state_dict(torch.load(opt_plane.checkpoint_dir + '/checkpoint.pth'),strict=False)
     
     # Mixed precision training https://github.com/NVIDIA/apex
     if mixed_precision:
@@ -202,11 +214,13 @@ def train():
                                   single_cls=opt.single_cls)
     
     m_params= None
+
+    p_params= dict(options=opt_plane, config=planercfg,random=False)
     
     #Loading complete dataset
-    training_dataset = load_data(y_params_trn, m_params)
+    training_dataset = load_data(p_params, y_params_trn, m_params)
     
-    testing_dataset = load_data(y_params_tst,m_params)
+    testing_dataset = load_data(p_params, y_params_tst,m_params)
                                   
     
     
@@ -302,18 +316,138 @@ def train():
                     
             yolo_input= imgs
             
+            
+            # from NVlabs Planercnn training 
+            plane_losses = []            
+
+            input_pair = []
+            detection_pair = []
+            dicts_pair = []
+            
+            camera = sample[30][0].cuda()
+
+            #for indexOffset in [0, ]:
+            indexOffset=0
+            images, image_metas, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks, gt_parameters, gt_depth, extrinsics, planes, gt_segmentation = sample[indexOffset + 0].cuda(), sample[indexOffset + 1].numpy(), sample[indexOffset + 2].cuda(), sample[indexOffset + 3].cuda(), sample[indexOffset + 4].cuda(), sample[indexOffset + 5].cuda(), sample[indexOffset + 6].cuda(), sample[indexOffset + 7].cuda(), sample[indexOffset + 8].cuda(), sample[indexOffset + 9].cuda(), sample[indexOffset + 10].cuda(), sample[indexOffset + 11].cuda()
+              
+            masks = (gt_segmentation == torch.arange(gt_segmentation.max() + 1).cuda().view(-1, 1, 1)).float()
+            input_pair.append({'image': images, 'depth': gt_depth, 'bbox': gt_boxes, 'extrinsics': extrinsics, 'segmentation': gt_segmentation, 'camera': camera, 'plane': planes[0], 'masks': masks, 'mask': gt_masks})
+            
+            plane_input= dict(input = [images, image_metas, gt_class_ids, gt_boxes, gt_masks, gt_parameters, camera], mode='inference_detection', use_nms=2, use_refinement=True, return_feature_map=False)
+
+
+
+
+
+
             print(len(midas_data), "hello")
+
 
             depth_img_size,depth_img,depth_target = midas_data
             
             depth_sample = torch.from_numpy(depth_img).to(device).unsqueeze(0)
             
-            midas_input= depth_sample
+            # midas_input= depth_sample
 
             # Run model
-            yolo_output,midas_output = model.forward(yolo_input,midas_input)
+            plane_output, yolo_output,midas_output = model.forward(plane_input, yolo_input)
             
             pred = yolo_output
+            rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, target_parameters, mrcnn_parameters, detections, detection_masks, detection_gt_parameters, detection_gt_masks, rpn_rois, roi_features, roi_indices, depth_np_pred = plane_output
+            
+            rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss, mrcnn_parameter_loss = compute_losses(planercfg, rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, target_parameters, mrcnn_parameters)
+
+            plane_losses =[rpn_class_loss + rpn_bbox_loss + mrcnn_class_loss + mrcnn_bbox_loss + mrcnn_mask_loss + mrcnn_parameter_loss]
+
+
+            if depth_np_pred.shape != gt_depth.shape:
+                depth_np_pred = torch.nn.functional.interpolate(depth_np_pred.unsqueeze(1), size=(512, 512), mode='bilinear',align_corners=False).squeeze(1)
+                pass
+
+            if planercfg.PREDICT_NORMAL_NP:
+                normal_np_pred = depth_np_pred[0, 1:]                    
+                depth_np_pred = depth_np_pred[:, 0]
+                gt_normal = gt_depth[0, 1:]                    
+                gt_depth = gt_depth[:, 0]
+                depth_np_loss = l1LossMask(depth_np_pred[:, 80:560], gt_depth[:, 80:560], (gt_depth[:, 80:560] > 1e-4).float())
+                normal_np_loss = l2LossMask(normal_np_pred[:, 80:560], gt_normal[:, 80:560], (torch.norm(gt_normal[:, 80:560], dim=0) > 1e-4).float())
+                plane_losses.append(depth_np_loss)
+                plane_losses.append(normal_np_loss)
+            else:
+                depth_np_loss = l1LossMask(depth_np_pred[:, 80:560], gt_depth[:, 80:560], (gt_depth[:, 80:560] > 1e-4).float())
+                plane_losses.append(depth_np_loss)
+                normal_np_pred = None
+                pass
+
+            if len(detections) > 0:
+                detections, detection_masks = unmoldDetections(planercfg, camera, detections, detection_masks, depth_np_pred, normal_np_pred, debug=False)
+                if 'refine_only' in opt_plane.suffix:
+                    detections, detection_masks = detections.detach(), detection_masks.detach()
+                    pass
+                XYZ_pred, detection_mask, plane_XYZ = calcXYZModule(planercfg, camera, detections, detection_masks, depth_np_pred, return_individual=True)
+                detection_mask = detection_mask.unsqueeze(0)                        
+            else:
+                XYZ_pred = torch.zeros((3, planercfg.IMAGE_MAX_DIM, planercfg.IMAGE_MAX_DIM)).cuda()
+                detection_mask = torch.zeros((1, planercfg.IMAGE_MAX_DIM, planercfg.IMAGE_MAX_DIM)).cuda()
+                plane_XYZ = torch.zeros((1, 3, planercfg.IMAGE_MAX_DIM, planercfg.IMAGE_MAX_DIM)).cuda() 
+                detections = torch.zeros((3, planercfg.IMAGE_MAX_DIM, planercfg.IMAGE_MAX_DIM)).cuda()
+                detection_masks = torch.zeros((3, planercfg.IMAGE_MAX_DIM, planercfg.IMAGE_MAX_DIM)).cuda()                        
+                pass
+
+
+            #input_pair.append({'image': images, 'depth': gt_depth, 'mask': gt_masks, 'bbox': gt_boxes, 'extrinsics': extrinsics, 'segmentation': gt_segmentation, 'parameters': detection_gt_parameters, 'plane': planes, 'camera': camera})
+            detection_pair.append({'XYZ': XYZ_pred, 'depth': XYZ_pred[1:2], 'mask': detection_mask, 'detection': detections, 'masks': detection_masks, 'plane_XYZ': plane_XYZ, 'depth_np': depth_np_pred})
+
+            loss_fn = nn.MSELoss()
+
+            try:
+
+                plane_parameters = torch.from_numpy(plane_np['plane_parameters']).cuda()
+                plane_masks = torch.from_numpy(plane_np['plane_masks']).cuda()
+                plane_parameters_pred = detection_pair[0]['detection'][:, 6:9]
+                plane_masks_pred = detection_pair[0]['masks'][:, 80:560]
+
+                if plane_parameters_pred.shape != plane_parameters.shape:
+                    plane_parameters_pred = torch.nn.functional.interpolate(plane_parameters_pred.unsqueeze(1).unsqueeze(0), size=plane_parameters.shape, mode='bilinear',align_corners=True).squeeze()
+                    pass
+                if plane_masks_pred.shape != plane_masks.shape:
+                    plane_masks_pred = torch.nn.functional.interpolate(plane_masks_pred.unsqueeze(1).unsqueeze(0), size=plane_masks.shape, mode='trilinear',align_corners=True).squeeze()
+                    pass
+
+                # print('plane_parameters',plane_parameters.shape)
+                # print('plane_masks',plane_masks.shape)
+                # print('plane_parameters_pred',plane_parameters_pred.shape)
+                # print('plane_masks_pred',plane_masks_pred.shape)
+               
+                
+                plane_params_loss = loss_fn(plane_parameters_pred,plane_parameters) + loss_fn(plane_masks_pred,plane_masks)
+            except:
+                plane_params_loss = 1
+
+            #print('plane_params_loss',plane_params_loss)
+
+
+            predicted_detection = visualizeBatchPair(opt_plane, planercfg, input_pair, detection_pair, indexOffset=i)
+            predicted_detection = torch.from_numpy(predicted_detection)
+
+            if predicted_detection.shape != plane_img.shape:
+                predicted_detection = torch.nn.functional.interpolate(predicted_detection.permute(2,0,1).unsqueeze(0).unsqueeze(1), size=plane_img.permute(2,0,1).shape).squeeze()
+                pass
+
+            plane_img = plane_img.permute(2,0,1)
+
+            #print('plane_img',plane_img.shape)
+            #print('predicted_detection',predicted_detection.shape)
+
+            plane_loss_ssim = pytorch_ssim.SSIM() #https://github.com/Po-Hsun-Su/pytorch-ssim
+            
+            
+            pln_ssim = torch.clamp(1-plane_loss_ssim(predicted_detection.unsqueeze(0).type(torch.cuda.FloatTensor),plane_img.unsqueeze(0).type(torch.cuda.FloatTensor)),min=0,max=1) #https://github.com/jorge-pessoa/pytorch-msssim
+            
+            plane_loss = sum(plane_losses) + pln_ssim
+            plane_losses = [l.data.item() for l in plane_losses] 
+
+
             depth_prediction = midas_output
             
             depth_prediction = (
@@ -355,7 +489,10 @@ def train():
             print(depth_target.shape, depth_prediction.shape, "hey man")
             #Computing depth loss
             
-            loss_fn = nn.MSELoss()
+            depth_pred = Variable( depth_out,  requires_grad=True)
+            depth_target = Variable( depth_target, requires_grad = False)
+            
+            # loss_fn = nn.MSELoss()
             
             loss_ssim = pytorch_ssim.SSIM(data_range=255, size_average=True)
             
@@ -368,8 +505,7 @@ def train():
             depth_loss = (0.0001*loss_RMSE) + ssim_out
             
 
-            depth_pred = Variable( depth_out,  requires_grad=True)
-            depth_target = Variable( depth_target, requires_grad = False)
+
 
             # Compute loss
             y_loss, y_loss_items = compute_loss(pred, targets, model)
@@ -381,7 +517,7 @@ def train():
 #            y_loss *= batch_size / 64
             
             #Total Loss
-            total_loss= y_loss + depth_loss 
+            total_loss= y_loss + depth_loss + plane_loss
 
             # Compute gradient
             if mixed_precision:
@@ -500,33 +636,33 @@ def train():
     return results, loss_list
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--epochs', type=int, default=300)  # 500200 batches at bs 16, 117263 COCO images = 273 epochs
-    parser.add_argument('--batch-size', type=int, default=16)  # effective bs = batch_size * accumulate = 16 * 4 = 64
-    parser.add_argument('--accumulate', type=int, default=4, help='batches to accumulate before optimizing')
-    parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='*.cfg path')
-    parser.add_argument('--data', type=str, default='data/coco2017.data', help='*.data path')
-    parser.add_argument('--multi-scale', action='store_true', help='adjust (67%% - 150%%) img_size every 10 batches')
-    parser.add_argument('--img-size', nargs='+', type=int, default=[512], help='[min_train, max-train, test] img sizes')
-    parser.add_argument('--rect', action='store_true', help='rectangular training')
-    parser.add_argument('--resume', action='store_true', help='resume training from last.pt')
-    parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
-    parser.add_argument('--notest', action='store_true', help='only test final epoch')
-    parser.add_argument('--evolve', action='store_true', help='evolve hyperparameters')
-    parser.add_argument('--bucket', type=str, default='', help='gsutil bucket')
-    parser.add_argument('--cache-images', action='store_true', help='cache images for faster training')
-    parser.add_argument('--weights', type=str, default='weights/yolov3-spp-ultralytics.pt', help='initial weights path')
-    parser.add_argument('--name', default='', help='renames results.txt to results_name.txt if supplied')
-    parser.add_argument('--device', default='', help='device id (i.e. 0 or 0,1 or cpu)')
-    parser.add_argument('--adam', action='store_true', help='use adam optimizer')
-    parser.add_argument('--single-cls', action='store_true', help='train as single-class dataset')
-    parser.add_argument('--input', type=str, default='input', help=' input path')
-    parser.add_argument('--output', type=str, default='output', help='output path')
-    parser.add_argument('--midasweights', type=str, default='/content/YoloV3/midas/model-f6b98070.pt', help='initial weights path')
-    opt = parser.parse_args()
-    opt.weights = last if opt.resume else opt.weights
-    print(opt)
+# if __name__ == '__main__':
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('--epochs', type=int, default=300)  # 500200 batches at bs 16, 117263 COCO images = 273 epochs
+#     parser.add_argument('--batch-size', type=int, default=16)  # effective bs = batch_size * accumulate = 16 * 4 = 64
+#     parser.add_argument('--accumulate', type=int, default=4, help='batches to accumulate before optimizing')
+#     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='*.cfg path')
+#     parser.add_argument('--data', type=str, default='data/coco2017.data', help='*.data path')
+#     parser.add_argument('--multi-scale', action='store_true', help='adjust (67%% - 150%%) img_size every 10 batches')
+#     parser.add_argument('--img-size', nargs='+', type=int, default=[512], help='[min_train, max-train, test] img sizes')
+#     parser.add_argument('--rect', action='store_true', help='rectangular training')
+#     parser.add_argument('--resume', action='store_true', help='resume training from last.pt')
+#     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
+#     parser.add_argument('--notest', action='store_true', help='only test final epoch')
+#     parser.add_argument('--evolve', action='store_true', help='evolve hyperparameters')
+#     parser.add_argument('--bucket', type=str, default='', help='gsutil bucket')
+#     parser.add_argument('--cache-images', action='store_true', help='cache images for faster training')
+#     parser.add_argument('--weights', type=str, default='weights/yolov3-spp-ultralytics.pt', help='initial weights path')
+#     parser.add_argument('--name', default='', help='renames results.txt to results_name.txt if supplied')
+#     parser.add_argument('--device', default='', help='device id (i.e. 0 or 0,1 or cpu)')
+#     parser.add_argument('--adam', action='store_true', help='use adam optimizer')
+#     parser.add_argument('--single-cls', action='store_true', help='train as single-class dataset')
+#     parser.add_argument('--input', type=str, default='input', help=' input path')
+#     parser.add_argument('--output', type=str, default='output', help='output path')
+#     parser.add_argument('--midasweights', type=str, default='/content/YoloV3/midas/model-f6b98070.pt', help='initial weights path')
+#     opt = parser.parse_args()
+#     opt.weights = last if opt.resume else opt.weights
+#     print(opt)
     opt.img_size.extend([opt.img_size[-1]] * (3 - len(opt.img_size)))  # extend to 3 sizes (min, max, test)
     device = torch_utils.select_device(opt.device, apex=mixed_precision, batch_size=opt.batch_size)
     if device.type == 'cpu':
