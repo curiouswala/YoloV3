@@ -663,14 +663,14 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
 #     opt = parser.parse_args()
 #     opt.weights = last if opt.resume else opt.weights
 #     print(opt)
-    opt.img_size.extend([opt.img_size[-1]] * (3 - len(opt.img_size)))  # extend to 3 sizes (min, max, test)
-    device = torch_utils.select_device(opt.device, apex=mixed_precision, batch_size=opt.batch_size)
-    if device.type == 'cpu':
-        mixed_precision = False
+opt.img_size.extend([opt.img_size[-1]] * (3 - len(opt.img_size)))  # extend to 3 sizes (min, max, test)
+device = torch_utils.select_device(opt.device, apex=mixed_precision, batch_size=opt.batch_size)
+if device.type == 'cpu':
+    mixed_precision = False
 
-        train()  # train normally
-    else:
-        train()  # train normally
+    train()  # train normally
+else:
+    train()  # train normally
 
     # scale hyp['obj'] by img_size (evolved at 320)
     # hyp['obj'] *= opt.img_size[0] / 320.
