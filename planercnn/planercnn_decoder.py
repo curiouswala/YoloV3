@@ -28,7 +28,7 @@ from roi_align import CropAndResize as CropAndResizeFunction # crop_and_resize m
 # from roialign.roi_align.crop_and_resize import CropAndResizeFunction
 
 import cv2
-from planercnn.models.modules import *
+from planercnn.modules import *
 from planercnn.utils import *
 
 ############################################################
