@@ -3,7 +3,7 @@ import argparse
 import torch.distributed as dist
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
-
+from torch.autograd import Variable
 from utils.parse_config import *
 import test  # import test.py to get mAP after each epoch
 from model import *
@@ -11,6 +11,11 @@ from utils.datasets import *
 from utils.utils import *
 from yolo_decoder import *
 from make_data import *
+
+import pytorch_ssim
+
+
+
 
 
 mixed_precision = True
@@ -240,6 +245,7 @@ def train():
 
     # Start training
     nb = len(trainloader)  # number of batches
+    # print(nb, "Hey sister")
     n_burn = max(3 * nb, 500)  # burn-in iterations, max(3 epochs, 500 iterations)
     maps = np.zeros(nc)  # mAP per class
     # torch.autograd.set_detect_anomaly(True)
@@ -250,20 +256,20 @@ def train():
     print('Starting training for %g epochs...' % epochs)
 
     loss_list=[]
-    dataset = training_dataset
+   
     
-    for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
+    for epoch in range(start_epoch, epochs+1):  # epoch ------------------------------------------------------------------
         model.train()
 
         # Update image weights (optional)
-        if dataset.image_weights:
-            w = model.class_weights.cpu().numpy() * (1 - maps) ** 2  # class weights
-            image_weights = labels_to_image_weights(dataset.labels, nc=nc, class_weights=w)
-            dataset.indices = random.choices(range(dataset.n), weights=image_weights, k=dataset.n)  # rand weighted idx
+        # if dataset.image_weights:
+        #     w = model.class_weights.cpu().numpy() * (1 - maps) ** 2  # class weights
+        #     image_weights = labels_to_image_weights(dataset.labels, nc=nc, class_weights=w)
+        #     dataset.indices = random.choices(range(dataset.n), weights=image_weights, k=dataset.n)  # rand weighted idx
 
         mloss = torch.zeros(4).to(device)  # mean losses
         print(('\n' + '%10s' * 8) % ('Epoch', 'gpu_mem', 'GIoU', 'obj', 'cls', 'total', 'targets', 'img_size'))
-        pbar = tqdm(enumerate(trainloader), total=nb)  # progress bar
+        pbar = tqdm(enumerate(trainloader))  # progress bar
         
         for i, (yolo_data, midas_data) in pbar:  # batch -------------------------------------------------------------
             
@@ -296,6 +302,8 @@ def train():
                     
             yolo_input= imgs
             
+            print(len(midas_data), "hello")
+
             depth_img_size,depth_img,depth_target = midas_data
             
             depth_sample = torch.from_numpy(depth_img).to(device).unsqueeze(0)
@@ -330,13 +338,13 @@ def train():
                 depth_out = max_val * (depth_prediction - depth_min) / (depth_max - depth_min)
             else:
                 depth_out = 0
-            print('depth_target',depth_target.size())
+            print('depth_target',depth_target.shape)
             depth_target = torch.from_numpy(np.asarray(depth_target)).to(device).type(torch.cuda.FloatTensor).unsqueeze(0)
 
             depth_target = (
                 torch.nn.functional.interpolate(
                     depth_target.unsqueeze(1),
-                    size=dp_img_size[:2],
+                    size=tuple(depth_img_size[:2]),
                     mode="bicubic",
                     align_corners=False
                 )
@@ -344,12 +352,12 @@ def train():
                 #.cpu()
                 #.numpy()
                 )
-
+            print(depth_target.shape, depth_prediction.shape, "hey man")
             #Computing depth loss
             
             loss_fn = nn.MSELoss()
             
-            loss_ssim = pytorch_ssim.SSIM()
+            loss_ssim = pytorch_ssim.SSIM(data_range=255, size_average=True)
             
             ssim_out = torch.clamp(1-loss_ssim(depth_prediction,depth_target),min=0,max=1)
             

@@ -123,11 +123,14 @@ class load_data(Dataset):
         if n > 500:
             np.savetxt('img_files.txt', self.img_files, delimiter="\n", fmt="%s")
 
+        print(batch_size, "batch_size")
+
         assert n > 0, 'No images found in %s. See %s' % (path, help_url)
         bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index
         nb = bi[-1] + 1  # number of batches
 
         self.n = n
+        print(bi,"Hey Batch")
         self.batch = bi  # batch index of image
         self.img_size = img_size
         self.augment = augment
@@ -275,9 +278,10 @@ class load_data(Dataset):
         self.depth_names=[]
         for im in self.img_files:
             im = im.split(os.sep)
-            im[3]= 'depth_images'
-            im[4] = im[4].replace(os.path.splitext(im[4])[-1], '.png')
+            im[3]= 'images'
+            im[4] = im[4].replace(os.path.splitext(im[4])[-1], '.jpg')
             im = os.sep.join(im)
+            # print(im, "hey brother")
             self.depth_names.append(im)
 
         # self.depth_names = [x.replace('images', 'depth_images').replace(os.path.splitext(x)[-1], '.png') for x in self.img_files]
@@ -330,10 +334,11 @@ class load_data(Dataset):
             pass
 
         # midas dataset start
+        # print(index, "Hey man")
 
         img_name = self.img_files[index] 
         depth_name = self.depth_names[index]
-
+        # print(depth_name, "Hey man")
         img_ip = utils.read_image(img_name)
         #print('img_ip',img_ip.shape)
         img_input = self.transform({"image": img_ip})["image"]
@@ -342,12 +347,15 @@ class load_data(Dataset):
 
 
         #print('depth_name',depth_name)
-        depth_img = cv2.imread(depth_name,0)
+        depth_img = cv2.imread(depth_name, 0)
+        # print(depth_img, "Hey man")
         #depth_img = cv2.cvtColor(depth_img, cv2.COLOR_BGR2GRAY)
 
         #print('depth_img',depth_img.shape)
 
         dp_data = [img_ip.shape,img_input,depth_img]
+
+        print(len(dp_data), "hey brother")
 
         # midas dataset end
 
@@ -593,7 +601,7 @@ class load_data(Dataset):
         yolo_item=[torch.from_numpy(img), labels_out, self.img_files[index], shapes]
 
         ## Yolo LoadImagesAndLabels END
-
+        print
         
         #print('plane:',len(data_pair))
         #print('yolo:',len(yolo_item))
@@ -609,14 +617,14 @@ class load_data(Dataset):
         yolo_item,dp_item = zip(*batch)
         
         up_depth=[]
-        if len(batch) > 1:
-            for i in range(len(batch)):
-                # up_plane.append(plane_item[i][0])
-                up_depth.append(dp_item[i][0])
-        else:
-            # up_plane = plane_item[0]
-            up_depth = dp_item[0]
-
+        # if len(batch) > 1:
+        #     for i in range(len(batch)):
+        # #         # up_plane.append(plane_item[i][0])
+        #         up_depth.append(dp_item[i][0])
+        # else:
+        #     # up_plane = plane_item[0]
+        up_depth = dp_item[0]
+        # print(up_depth, "Hey father")
 
         # for p in range(31):
         #     up_plane[0][p] = torch.from_numpy(up_plane[0][p]).unsqueeze(0)
@@ -634,7 +642,7 @@ class load_data(Dataset):
 
         yolo_item = [torch.stack(img, 0), torch.cat(label, 0), path, shapes]
 
-
+        print(len(up_depth), "Hey sister")
         return yolo_item,up_depth
 
     def __len__(self):
