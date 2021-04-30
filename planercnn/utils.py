@@ -144,23 +144,31 @@ def resize_image(image, min_dim=None, max_dim=None, padding=False, interp='bilin
         if round(image_max * scale) > max_dim:
             scale = max_dim / image_max
     ## Resize image and mask
+    # print(image, scale, "Image -3")
     if scale != 1:
-        image = cv2.resize(image, (image.shape[1] * scale, image.shape[0] * scale))
+        image = cv2.resize(image, (int(image.shape[1] * scale), int(image.shape[0] * scale)))
     ## Need padding?
     if padding:
         ## Get new height and width
         h, w = image.shape[:2]
         top_pad = (min_dim - h) // 2
+        # print(top_pad, "top_pad")
         bottom_pad = min_dim - h - top_pad
+        # print(bottom_pad, "bottom_pad")
         left_pad = (max_dim - w) // 2
+        # print(left_pad, "left_pad")
         right_pad = max_dim - w - left_pad
-        padding = [(top_pad, bottom_pad), (left_pad, right_pad), (0, 0)]
-        image = np.pad(image, padding, mode='constant', constant_values=0)
+        # print(right_pad, "right_pad")
+        padding_w = [(top_pad, bottom_pad), (left_pad, right_pad), (0, 0)]
+        # print(padding_w, "pad")
+        print(image[0], "Image-5")
+        image = np.pad(image,pad_width= padding_w, mode='constant', constant_values=0)
+        print(image[0], "Image-4")
         window = (top_pad, left_pad, h + top_pad, w + left_pad)
-    return image, window, scale, padding
+    return image, window, scale, padding_w
 
 
-def resize_mask(mask, scale, padding):
+def resize_mask(mask, scale, padding_w):
     """Resizes a mask using the given scale and padding.
     Typically, you get the scale and padding from resize_image() to
     ensure both, the image and the mask, are resized consistently.
@@ -170,7 +178,7 @@ def resize_mask(mask, scale, padding):
             [(top, bottom), (left, right), (0, 0)]
     """
     h, w = mask.shape[:2]
-    mask = np.pad(mask, padding, mode='constant', constant_values=0)
+    mask = np.pad(mask, pad_width= padding_w, mode='constant', constant_values=0)
     return mask
 
 
@@ -353,6 +361,9 @@ def mold_image(images, config):
 
 def unmold_image(normalized_images, config):
     """Takes a image normalized with mold() and returns the original."""
+    image = normalized_images + config.MEAN_PIXEL
+    # print(image, "None type image")
+    # print(image.astype(np.int32), "Final Image")
     return (normalized_images + config.MEAN_PIXEL).astype(np.uint8)
 
 

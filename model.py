@@ -40,7 +40,7 @@ class Model_Head(nn.Module):
       
         self.yolo_decoder=yolo_model.Darknet(cfg)
 
-        self.planer_decoder= MaskRCNN(planercfg)
+        self.planer_decoder= MaskRCNN(planercfg, self.encoder )
 
 
     # def midas_encoder(self, x):
@@ -74,7 +74,7 @@ class Model_Head(nn.Module):
     #     planer_out= maskrcnn(x, layers)
     #     return planer_out
 
-    def forward(self, plane_inp,yolo_inp):
+    def forward(self, yolo_inp, plane_inp):
         
         x = yolo_inp
         plane_inp['input'][0] = yolo_inp

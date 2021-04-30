@@ -31,11 +31,12 @@ for orientation in ExifTags.TAGS.keys():
     if ExifTags.TAGS[orientation] == 'Orientation':
         break
 
-import midas.utils as utils
+import midas.utils as dp_utils
 
 from torchvision.transforms import Compose
 from midas.transforms import Resize, NormalizeImage, PrepareForNet
-
+from planercnn.utils import *
+from planercnn.plane_dataset import *
 
 
 
@@ -44,6 +45,7 @@ class load_data(Dataset):
     # Code taken from LoadImagesAndLabels(yolo) and InferenceDataset (planercnn) 
     def __init__(self,planercnn_params, yolo_params,midas_params):
         self.random = True
+        
        
         ## InferenceDataset start
         
@@ -51,13 +53,15 @@ class load_data(Dataset):
         self.config = planercnn_params['config']
         self.random = planercnn_params['random']
         #self.camera = camera
-        #self.imagePaths = image_list
+        # self.imagePaths = image_list
         self.anchors = generate_pyramid_anchors(self.config.RPN_ANCHOR_SCALES,
                                                       self.config.RPN_ANCHOR_RATIOS,
                                                       self.config.BACKBONE_SHAPES,
                                                       self.config.BACKBONE_STRIDES,
                                                       self.config.RPN_ANCHOR_STRIDE)
-
+        
+        # image_list = glob.glob(self.options.customDataFolder + '/*.png') + glob.glob(self.options.customDataFolder + '/*.jpg')
+        # print(image_list)
         if os.path.exists(self.options.customDataFolder + '/camera.txt'):
             self.camera = np.zeros(6)
             with open(self.options.customDataFolder + '/camera.txt', 'r') as f:
@@ -120,14 +124,14 @@ class load_data(Dataset):
         if n > 500:
             np.savetxt('img_files.txt', self.img_files, delimiter="\n", fmt="%s")
 
-        print(batch_size, "batch_size")
+        # print(batch_size, "batch_size")
 
         assert n > 0, 'No images found in %s. See %s' % (path, help_url)
         bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index
         nb = bi[-1] + 1  # number of batches
 
         self.n = n
-        print(bi,"Hey Batch")
+        # print(bi,"Hey Batch")
         self.batch = bi  # batch index of image
         self.img_size = img_size
         self.augment = augment
@@ -335,7 +339,7 @@ class load_data(Dataset):
         img_name = self.img_files[index] 
         depth_name = self.depth_names[index]
         # print(depth_name, "Hey man")
-        img_ip = utils.read_image(img_name)
+        img_ip = dp_utils.read_image(img_name)
         #print('img_ip',img_ip.shape)
         img_input = self.transform({"image": img_ip})["image"]
         #print('img_input',img_input)
@@ -351,7 +355,7 @@ class load_data(Dataset):
 
         dp_data = [img_ip.shape,img_input,depth_img]
 
-        print(len(dp_data), "hey brother")
+        # print(len(dp_data), "hey brother")
 
         # midas dataset end
 
@@ -360,10 +364,11 @@ class load_data(Dataset):
         image = cv2.imread(imagePath)
         orig_image = image.copy()
         extrinsics = np.eye(4, dtype=np.float32)
-
+        # print(self.camera[index] ,"Camera Index")
         if isinstance(self.camera, list):
             if isinstance(self.camera[index], str):
                 camera = np.zeros(6)
+                
                 with open(self.camera[index], 'r') as f:
                     for line in f:
                         values = [float(token.strip()) for token in line.split(' ') if token.strip() != '']
@@ -387,10 +392,13 @@ class load_data(Dataset):
 
         
         depth = np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), dtype=np.float32)
+        # print(depth.shape)
         # used midas depth for planer depth
         #print('depth_img',depth_img.shape)
-        #depth = torch.nn.functional.interpolate(torch.from_numpy(depth_img).unsqueeze(0).unsqueeze(1), size=(self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), mode="bicubic",align_corners=False).numpy()
-        #depth = cv2.resize(depth_img, dsize=(self.config.IMAGE_MAX_DIM,self.config.IMAGE_MIN_DIM), interpolation=cv2.INTER_CUBIC)
+        # depth = torch.nn.functional.interpolate(torch.from_numpy(depth_img).unsqueeze(0).unsqueeze(1), size=(self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), mode="bicubic",align_corners=False).numpy()
+        
+        # depth = cv2.resize(depth_img, dsize=(self.config.IMAGE_MAX_DIM,self.config.IMAGE_MIN_DIM), interpolation=cv2.INTER_CUBIC)
+        # print(depth.shape)
         segmentation = np.zeros((self.config.IMAGE_MIN_DIM, self.config.IMAGE_MAX_DIM), dtype=np.int32)
 
 
@@ -456,8 +464,11 @@ class load_data(Dataset):
         mask = np.stack(instance_masks, axis=2)
         class_ids = np.array(class_ids, dtype=np.int32)
 
+        # print(type(index), type(image), type(depth), type(mask), type(class_ids), type(parameters))
+        # print(image, "Image -2")
         image, image_metas, gt_class_ids, gt_boxes, gt_masks, gt_parameters = load_image_gt(self.config, index, image, depth, mask, class_ids, parameters, augment=False)
-
+        
+        # print(image, "Image 0")
         ## RPN Targets
         rpn_match, rpn_bbox = build_rpn_targets(image.shape, self.anchors,
                                                 gt_class_ids, gt_boxes, self.config)
@@ -474,11 +485,14 @@ class load_data(Dataset):
 
         ## Add to batch
         rpn_match = rpn_match[:, np.newaxis]
+        # print(image, "Image1")
         image = mold_image(image.astype(np.float32), self.config)
-
+        # print(image, "Image2")
+        # print(depth.shape)
         depth = np.concatenate([np.zeros((64, 512)), depth, np.zeros((64, 512))], axis=0).astype(np.float32)
+        # print(depth.shape)
         segmentation = np.concatenate([np.full((64, 512), fill_value=-1), segmentation, np.full((64, 512), fill_value=-1)], axis=0).astype(np.float32)
-
+        # print(segmentation, "segmentation")
         data_pair = [image.transpose((2, 0, 1)).astype(np.float32), image_metas, rpn_match.astype(np.int32), rpn_bbox.astype(np.float32), gt_class_ids.astype(np.int32), gt_boxes.astype(np.float32), gt_masks.transpose((2, 0, 1)).astype(np.float32), gt_parameters[:, :-1].astype(np.float32), depth.astype(np.float32), extrinsics.astype(np.float32), planes.astype(np.float32), segmentation.astype(np.int64), gt_parameters[:, -1].astype(np.int32)]
         data_pair = data_pair + data_pair
 
@@ -488,6 +502,7 @@ class load_data(Dataset):
         data_pair.append(planes)
         data_pair.append(np.zeros((len(planes), len(planes))))
         data_pair.append(camera.astype(np.float32))
+        # print(data_pair[0], "Make data pair")
 
         plane_name = self.plane_names[index]
         plane_img = cv2.imread(plane_name)
@@ -617,11 +632,14 @@ class load_data(Dataset):
         else:
             up_plane = plane_item[0]
             up_depth = dp_item[0]
-        # print(up_depth, "Hey father")
+        
+        # print(up_plane.dtype)
+        print(type(up_plane[1][0]))
 
         for p in range(31):
             up_plane[0][p] = torch.from_numpy(up_plane[0][p]).unsqueeze(0)
-        up_plane[1] = torch.from_numpy(up_plane[1])
+            up_plane[1][p] = torch.from_numpy(up_plane[1][p])
+        # print(up_plane)
 
 
         # print('plane item:',len(plane_item[0]))
@@ -635,7 +653,7 @@ class load_data(Dataset):
 
         yolo_item = [torch.stack(img, 0), torch.cat(label, 0), path, shapes]
 
-        print(len(up_depth), "Hey sister")
+        # print(len(up_plane), "Up plane Length")
         return up_plane,yolo_item,up_depth
 
     def __len__(self):

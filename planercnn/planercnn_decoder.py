@@ -23,8 +23,8 @@ import planercnn.utils as utils
 # from nms.nms_wrapper import nms
 from torchvision.ops import nms
 
-from roi_align import RoIAlign      # RoIAlign module
-from roi_align import CropAndResize as CropAndResizeFunction # crop_and_resize module
+from RoIAlign_pytorch.roi_align.roi_align import RoIAlign      # RoIAlign module
+from RoIAlign_pytorch.roi_align.roi_align import CropAndResize as CropAndResizeFunction # crop_and_resize module
 # from roialign.roi_align.crop_and_resize import CropAndResizeFunction
 
 import cv2
@@ -122,7 +122,7 @@ class FPN(nn.Module):
             nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, stride=1),
         )
 
-    def forward(self, x, layer2, layer3, layer4):
+    def forward(self, x, layer_1, layer_2, layer_3, layer_4):
         # x = self.C1(x)
         # x = self.C2(x)
         c2_out = layer_1
@@ -1647,7 +1647,7 @@ class MaskRCNN(nn.Module):
         self.apply(set_bn_eval)
 
         ## Feature extraction
-        [p2_out, p3_out, p4_out, p5_out, p6_out] = self.fpn(molded_images)
+        [p2_out, p3_out, p4_out, p5_out, p6_out] = self.fpn(molded_images, layer_1, layer_2, layer_3, layer_4 )
         ## Note that P6 is used in RPN, but not in the classifier heads.
 
         rpn_feature_maps = [p2_out, p3_out, p4_out, p5_out, p6_out]

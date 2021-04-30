@@ -67,19 +67,27 @@ if hyp['fl_gamma']:
 
 def train(plane_parse_args,yolo_parse_args,midas_parse_args):
     #For yolo
+    print("Opt", yolo_parse_args)
     opt= yolo_parse_args
     cfg = opt.cfg
+    # print(opt)
     data = opt.data
     epochs = opt.epochs  # 500200 batches at bs 64, 117263 images = 273 epochs
     batch_size = opt.batch_size
     accumulate = opt.accumulate  # effective bs = batch_size * accumulate = 16 * 4 = 64
     weights = opt.weights  # initial yolo training weights
+    opt.img_size.extend([opt.img_size[-1]] * (3 - len(opt.img_size)))  # extend to 3 sizes (min, max, test)
+    print("Opt img size", opt.img_size)
     imgsz_min, imgsz_max, imgsz_test = opt.img_size  # img sizes (min, max, test)
-    
+    device = torch_utils.select_device(opt.device, apex=mixed_precision, batch_size=opt.batch_size)
+
     #For Planercnn
     opt_plane= plane_parse_args
     planercfg= InferenceConfig(opt_plane)
+    
 
+    #For Midas
+    midas_args= midas_parse_args
     # Image Sizes
     gs = 64  # (pixels) grid size
     assert math.fmod(imgsz_min, gs) == 0, '--img-size %g must be a %g-multiple' % (imgsz_min, gs)
@@ -285,7 +293,7 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
         print(('\n' + '%10s' * 8) % ('Epoch', 'gpu_mem', 'GIoU', 'obj', 'cls', 'total', 'targets', 'img_size'))
         pbar = tqdm(enumerate(trainloader))  # progress bar
         
-        for i, (yolo_data, midas_data) in pbar:  # batch -------------------------------------------------------------
+        for i, (planer_data, yolo_data, midas_data) in pbar:  # batch -------------------------------------------------------------
             
             optimizer.zero_grad()
             imgs, targets, paths, _= yolo_data
@@ -318,6 +326,12 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
             
             
             # from NVlabs Planercnn training 
+
+            data_pair,plane_img,plane_np = planer_data
+            # print(data_pair[0], "Planer Data")
+            sampleIndex = i
+            sample = data_pair
+
             plane_losses = []            
 
             input_pair = []
@@ -325,14 +339,14 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
             dicts_pair = []
             
             camera = sample[30][0].cuda()
-
+            
             #for indexOffset in [0, ]:
             indexOffset=0
             images, image_metas, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks, gt_parameters, gt_depth, extrinsics, planes, gt_segmentation = sample[indexOffset + 0].cuda(), sample[indexOffset + 1].numpy(), sample[indexOffset + 2].cuda(), sample[indexOffset + 3].cuda(), sample[indexOffset + 4].cuda(), sample[indexOffset + 5].cuda(), sample[indexOffset + 6].cuda(), sample[indexOffset + 7].cuda(), sample[indexOffset + 8].cuda(), sample[indexOffset + 9].cuda(), sample[indexOffset + 10].cuda(), sample[indexOffset + 11].cuda()
-              
+            # print(images, "Sample Image")  
             masks = (gt_segmentation == torch.arange(gt_segmentation.max() + 1).cuda().view(-1, 1, 1)).float()
             input_pair.append({'image': images, 'depth': gt_depth, 'bbox': gt_boxes, 'extrinsics': extrinsics, 'segmentation': gt_segmentation, 'camera': camera, 'plane': planes[0], 'masks': masks, 'mask': gt_masks})
-            
+            # print(input_pair[0]['image'], "Image input pair")
             plane_input= dict(input = [images, image_metas, gt_class_ids, gt_boxes, gt_masks, gt_parameters, camera], mode='inference_detection', use_nms=2, use_refinement=True, return_feature_map=False)
 
 
@@ -340,7 +354,7 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
 
 
 
-            print(len(midas_data), "hello")
+            # print(len(midas_data), "hello")
 
 
             depth_img_size,depth_img,depth_target = midas_data
@@ -350,7 +364,7 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
             # midas_input= depth_sample
 
             # Run model
-            plane_output, yolo_output,midas_output = model.forward(plane_input, yolo_input)
+            plane_output, yolo_output,midas_output = model.forward(yolo_input, plane_input)
             
             pred = yolo_output
             rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, target_parameters, mrcnn_parameters, detections, detection_masks, detection_gt_parameters, detection_gt_masks, rpn_rois, roi_features, roi_indices, depth_np_pred = plane_output
@@ -486,7 +500,7 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
                 #.cpu()
                 #.numpy()
                 )
-            print(depth_target.shape, depth_prediction.shape, "hey man")
+            # print(depth_target.shape, depth_prediction.shape, "hey man")
             #Computing depth loss
             
             depth_pred = Variable( depth_out,  requires_grad=True)

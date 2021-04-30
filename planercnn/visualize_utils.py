@@ -82,12 +82,17 @@ def visualizeBatchDeMoN(options, input_dict, results, indexOffset=0, prefix='', 
     return
 
 def visualizeBatchPair(options, config, inp_pair, detection_pair, indexOffset=0, prefix='', suffix='', write_ply=False, write_new_view=False):
-    detection_images = []    
+    detection_images = [] 
+           
     for pair_index, (input_dict, detection_dict) in enumerate(zip(inp_pair, detection_pair)):
         image_dict = visualizeBatchDetection(options, config, input_dict, detection_dict, indexOffset=indexOffset, prefix=prefix, suffix='_' + str(pair_index), prediction_suffix=suffix, write_ply=write_ply, write_new_view=write_new_view)
+        # print(image_dict, "Image_dict1")
+        # print(image_dict['detection'], "Detection")
         detection_images.append(image_dict['detection'])
         continue
+    # print(detection_images, "detection_image")
     detection_image = tileImages([detection_images])
+    # print(detection_image[0], "detection_image")
     return
 
 def visualizeBatchRefinement(options, config, input_dict, results, indexOffset=0, prefix='', suffix='', concise=False):
@@ -170,12 +175,17 @@ def visualizeBatchRefinement(options, config, input_dict, results, indexOffset=0
 
 def visualizeBatchDetection(options, config, input_dict, detection_dict, indexOffset=0, prefix='', suffix='', prediction_suffix='', write_ply=False, write_new_view=False):
     image_dict = {}
+
     images = input_dict['image'].detach().cpu().numpy().transpose((0, 2, 3, 1))
+    # print(images, "Images 1 ")
     images = unmold_image(images, config)
+    # print(images, "Images 2 ")
     image = images[0]
+    # print(image, "Image Shape")
     cv2.imwrite(options.test_dir + '/' + str(indexOffset) + '_image' + suffix + '.png', image[80:560])
     
     if 'warped_image' in input_dict:
+        print("Going 1")
         warped_images = input_dict['warped_image'].detach().cpu().numpy().transpose((0, 2, 3, 1))
         warped_images = unmold_image(warped_images, config)
         warped_image = warped_images[0]
@@ -359,6 +369,7 @@ def visualizeBatchDetection(options, config, input_dict, detection_dict, indexOf
         except:
             pass
         pass
+    # print(image_dict, "Image_dict")
     return image_dict
 
 

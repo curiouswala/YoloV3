@@ -1,10 +1,3 @@
-"""
-Copyright (c) 2017 Matterport, Inc.
-Copyright (C) 2019 NVIDIA Corporation.  All rights reserved.
-Licensed under the CC BY-NC-SA 4.0 license
-(https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
-"""
-
 import math
 import numpy as np
 import os
@@ -159,8 +152,8 @@ class Config(object):
 
     METADATA = np.array([571.87, 571.87, 320, 240, 640, 480, 0, 0, 0, 0])
 
-    IMAGE_MAX_DIM = 640
-    IMAGE_MIN_DIM = 480
+    IMAGE_MAX_DIM = 512
+    IMAGE_MIN_DIM = 384
 
     GLOBAL_MASK = False
     PREDICT_DEPTH = False
@@ -201,7 +194,7 @@ class Config(object):
         self.OCCLUSION = 'occlusion' in options.dataset
         
         self.loadAnchorPlanes(options.anchorType)
-        self.PREDICT_DEPTH = True
+        self.PREDICT_DEPTH = False
         self.PREDICT_BOUNDARY = False
         self.PREDICT_NORMAL_NP = 'normal_np' in options.suffix
         
@@ -235,7 +228,7 @@ class Config(object):
                 self.ANCHOR_OFFSETS_TENSOR = torch.from_numpy(self.ANCHOR_OFFSETS.astype(np.float32)).cuda()
             elif 'normal' in self.ANCHOR_TYPE:
                 if self.ANCHOR_TYPE == 'normal':
-                    self.ANCHOR_NORMALS = np.load(self.dataFolder + '/anchor_planes_N.npy')
+                    self.ANCHOR_NORMALS = np.load('/content/YoloV3/planercnn/anchor_planes_N.npy')
                 else:
                     k = int(self.ANCHOR_TYPE[6:])
                     if k == 0:

@@ -12,8 +12,8 @@ import time
 import os
 import cv2
 import sys
-import utils
-from datasets.scannet_scene import ScanNetScene
+import planercnn.utils as utils
+
 
 class PlaneDatasetSingle(Dataset):
     def __init__(self, options, config, split, random=True, loadNeighborImage=False, load_semantics=False, load_boundary=False):
@@ -454,13 +454,17 @@ def load_image_gt(config, image_id, image, depth, mask, class_ids, parameters, a
     """
     ## Load image and mask
     shape = image.shape
-    image, window, scale, padding = utils.resize_image(
+    # print(type(image),config.IMAGE_MAX_DIM, config.IMAGE_PADDING )
+    image, window, scale, padding_w = utils.resize_image(
         image,
         min_dim=config.IMAGE_MAX_DIM,
         max_dim=config.IMAGE_MAX_DIM,
         padding=config.IMAGE_PADDING)
 
-    mask = utils.resize_mask(mask, scale, padding)
+    # print(padding_w, "padding")    
+    
+    # print(image, "image -1")
+    mask = utils.resize_mask(mask, scale, padding_w)
     
     ## Random horizontal flips.
     if augment and False:
