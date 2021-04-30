@@ -179,6 +179,7 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
 
 
     model.load_state_dict(torch.load(opt_plane.checkpoint_dir + '/checkpoint.pth'),strict=False)
+    model.to(device)
     
     # Mixed precision training https://github.com/NVIDIA/apex
     if mixed_precision:
@@ -442,8 +443,11 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
 
 
             predicted_detection = visualizeBatchPair(opt_plane, planercfg, input_pair, detection_pair, indexOffset=i)
+            print(type(predicted_detection), "type")
             predicted_detection = torch.from_numpy(predicted_detection)
 
+            print(type(plane_img), "Plane img type")
+            plane_img = torch.from_numpy(plane_img)
             if predicted_detection.shape != plane_img.shape:
                 predicted_detection = torch.nn.functional.interpolate(predicted_detection.permute(2,0,1).unsqueeze(0).unsqueeze(1), size=plane_img.permute(2,0,1).shape).squeeze()
                 pass

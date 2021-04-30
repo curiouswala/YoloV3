@@ -160,10 +160,11 @@ def resize_image(image, min_dim=None, max_dim=None, padding=False, interp='bilin
         right_pad = max_dim - w - left_pad
         # print(right_pad, "right_pad")
         padding_w = [(top_pad, bottom_pad), (left_pad, right_pad), (0, 0)]
-        # print(padding_w, "pad")
-        print(image[0], "Image-5")
+        print(padding_w, "pad")
+        print(image.shape, "Image-5")
+        cv2.imwrite( '/content/YoloV3/Image-5.jpg', image) 
         image = np.pad(image,pad_width= padding_w, mode='constant', constant_values=0)
-        print(image[0], "Image-4")
+        cv2.imwrite( '/content/YoloV3/Image-4.jpg', image) 
         window = (top_pad, left_pad, h + top_pad, w + left_pad)
     return image, window, scale, padding_w
 

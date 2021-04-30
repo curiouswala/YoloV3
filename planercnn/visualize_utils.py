@@ -93,7 +93,7 @@ def visualizeBatchPair(options, config, inp_pair, detection_pair, indexOffset=0,
     # print(detection_images, "detection_image")
     detection_image = tileImages([detection_images])
     # print(detection_image[0], "detection_image")
-    return
+    return detection_image
 
 def visualizeBatchRefinement(options, config, input_dict, results, indexOffset=0, prefix='', suffix='', concise=False):
     if not concise:
@@ -177,9 +177,10 @@ def visualizeBatchDetection(options, config, input_dict, detection_dict, indexOf
     image_dict = {}
 
     images = input_dict['image'].detach().cpu().numpy().transpose((0, 2, 3, 1))
-    # print(images, "Images 1 ")
+    # print("Image-6")
+    # cv2.imwrite( '/content/YoloV3/Image-6.jpg', images[0]) 
     images = unmold_image(images, config)
-    # print(images, "Images 2 ")
+    # cv2.imwrite( '/content/YoloV3/Image-7.jpg', images[0]) 
     image = images[0]
     # print(image, "Image Shape")
     cv2.imwrite(options.test_dir + '/' + str(indexOffset) + '_image' + suffix + '.png', image[80:560])
@@ -369,7 +370,7 @@ def visualizeBatchDetection(options, config, input_dict, detection_dict, indexOf
         except:
             pass
         pass
-    # print(image_dict, "Image_dict")
+    print(image_dict.keys(), "Image_dict")
     return image_dict
 
 
