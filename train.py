@@ -77,7 +77,7 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
     accumulate = opt.accumulate  # effective bs = batch_size * accumulate = 16 * 4 = 64
     weights = opt.weights  # initial yolo training weights
     opt.img_size.extend([opt.img_size[-1]] * (3 - len(opt.img_size)))  # extend to 3 sizes (min, max, test)
-    print("Opt img size", opt.img_size)
+    # print("Opt img size", opt.img_size)
     imgsz_min, imgsz_max, imgsz_test = opt.img_size  # img sizes (min, max, test)
     device = torch_utils.select_device(opt.device, apex=mixed_precision, batch_size=opt.batch_size)
 
@@ -228,7 +228,7 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
     
     #Loading complete dataset
     training_dataset = load_data(p_params, y_params_trn, m_params)
-    
+    # print(len(training_dataset), "training dataset lenght")
     testing_dataset = load_data(p_params, y_params_tst,m_params)
                                   
     
@@ -366,7 +366,7 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
 
             # Run model
             plane_output, yolo_output,midas_output = model.forward(yolo_input, plane_input)
-            
+            print(len(yolo_input), len(yolo_output), "Yolo input output")
             pred = yolo_output
             rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, target_parameters, mrcnn_parameters, detections, detection_masks, detection_gt_parameters, detection_gt_masks, rpn_rois, roi_features, roi_indices, depth_np_pred = plane_output
             
@@ -443,10 +443,10 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
 
 
             predicted_detection = visualizeBatchPair(opt_plane, planercfg, input_pair, detection_pair, indexOffset=i)
-            print(type(predicted_detection), "type")
+            # print(type(predicted_detection), "type")
             predicted_detection = torch.from_numpy(predicted_detection)
 
-            print(type(plane_img), "Plane img type")
+            # print(type(plane_img), "Plane img type")
             plane_img = torch.from_numpy(plane_img)
             if predicted_detection.shape != plane_img.shape:
                 predicted_detection = torch.nn.functional.interpolate(predicted_detection.permute(2,0,1).unsqueeze(0).unsqueeze(1), size=plane_img.permute(2,0,1).shape).squeeze()
@@ -463,6 +463,7 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
             pln_ssim = torch.clamp(1-plane_loss_ssim(predicted_detection.unsqueeze(0).type(torch.cuda.FloatTensor),plane_img.unsqueeze(0).type(torch.cuda.FloatTensor)),min=0,max=1) #https://github.com/jorge-pessoa/pytorch-msssim
             
             plane_loss = sum(plane_losses) + pln_ssim
+            # print(plane_loss, "plane loss")
             plane_losses = [l.data.item() for l in plane_losses] 
 
 
@@ -488,15 +489,16 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
 
             if depth_max - depth_min > np.finfo("float").eps:
                 depth_out = max_val * (depth_prediction - depth_min) / (depth_max - depth_min)
+                # print(type(depth_out), "type")
             else:
-                depth_out = 0
-            print('depth_target',depth_target.shape)
+                depth_out= torch.tensor(0.0)
+            # print('depth_target',depth_target.shape)
             depth_target = torch.from_numpy(np.asarray(depth_target)).to(device).type(torch.cuda.FloatTensor).unsqueeze(0)
 
             depth_target = (
                 torch.nn.functional.interpolate(
                     depth_target.unsqueeze(1),
-                    size=tuple(depth_img_size[:2]),
+                    size=depth_img_size[:2],
                     mode="bicubic",
                     align_corners=False
                 )
@@ -506,27 +508,31 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
                 )
             # print(depth_target.shape, depth_prediction.shape, "hey man")
             #Computing depth loss
-            
+            # print(depth_out, "Depth_out")
             depth_pred = Variable( depth_out,  requires_grad=True)
             depth_target = Variable( depth_target, requires_grad = False)
             
             # loss_fn = nn.MSELoss()
+            # print(len(depth_pred), len(depth_target), "length depth")
+            loss_ssim = pytorch_ssim.SSIM()
             
-            loss_ssim = pytorch_ssim.SSIM(data_range=255, size_average=True)
-            
-            ssim_out = torch.clamp(1-loss_ssim(depth_prediction,depth_target),min=0,max=1)
+            ssim_out = torch.clamp(1-loss_ssim(depth_pred,depth_target),min=0,max=1)
             
             
             
-            loss_RMSE = torch.sqrt(loss_fn(depth_prediction, depth_target))
+            loss_RMSE = torch.sqrt(loss_fn(depth_pred, depth_target))
             
             depth_loss = (0.0001*loss_RMSE) + ssim_out
+
+            # print(depth_loss, "depth loss")
             
 
 
 
             # Compute loss
+            # print(len(pred), len(targets), "length")
             y_loss, y_loss_items = compute_loss(pred, targets, model)
+            # print(y_loss, "yolo loss")
             if not torch.isfinite(y_loss):
                 print('WARNING: non-finite loss, ending training ', y_loss_items)
                 return results
@@ -535,12 +541,15 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
 #            y_loss *= batch_size / 64
             
             #Total Loss
-            total_loss= y_loss + depth_loss + plane_loss
+            total_loss= y_loss + plane_loss + depth_loss 
+            print(total_loss, "total_loss")
 
             # Compute gradient
+            print(mixed_precision, "mixed precision")
             if mixed_precision:
                 with amp.scale_loss(total_loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
+                    print("i m in mixed precision")
             else:
                 total_loss.backward()
 
@@ -572,16 +581,16 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
         # Process epoch results
         ema.update_attr(model)
         final_epoch = epoch + 1 == epochs
-        if not opt.notest or final_epoch:  # Calculate mAP
-            is_coco = any([x in data for x in ['coco.data', 'coco2014.data', 'coco2017.data']]) and model.nc == 80
-            results, maps = test.test(cfg,
-                                        data,
-                                        batch_size=batch_size,
-                                        img_size=imgsz_test,
-                                        model=ema.ema,
-                                        save_json=final_epoch and is_coco,
-                                        single_cls=opt.single_cls,
-                                        dataloader=testloader)
+        # if not opt.notest or final_epoch:  # Calculate mAP
+        #     is_coco = any([x in data for x in ['coco.data', 'coco2014.data', 'coco2017.data']]) and model.nc == 80
+        #     results, maps = test.test(cfg,
+        #                                 data,
+        #                                 batch_size=batch_size,
+        #                                 img_size=imgsz_test,
+        #                                 model=ema.ema,
+        #                                 save_json=final_epoch and is_coco,
+        #                                 single_cls=opt.single_cls,
+        #                                 dataloader=testloader)
 
 #        # Write epoch results
 #        with open(results_file, 'a') as f:
@@ -628,7 +637,7 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
         #     torch.save(chkpt, wdir + 'backup%g.pt' % epoch)
 
         # Delete checkpoint
-        del chkpt
+        # del chkpt
 
         # end epoch ----------------------------------------------------------------------------------------------------
 
@@ -644,14 +653,14 @@ def train(plane_parse_args,yolo_parse_args,midas_parse_args):
     #             strip_optimizer(f2) if ispt else None  # strip optimizer
     #             os.system('gsutil cp %s gs://%s/weights' % (f2, opt.bucket)) if opt.bucket and ispt else None  # upload
 
-    loss_list.append(total_loss.item())
+        loss_list.append(total_loss.item())
 
     plot_results()  # save as results.png
     print('%g epochs completed in %.3f hours.\n' % (epoch - start_epoch + 1, (time.time() - t0) / 3600))
     dist.destroy_process_group() if torch.cuda.device_count() > 1 else None
     torch.cuda.empty_cache()
 
-    return results, loss_list
+    return loss_list
 
 
 # if __name__ == '__main__':

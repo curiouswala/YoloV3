@@ -370,7 +370,7 @@ def visualizeBatchDetection(options, config, input_dict, detection_dict, indexOf
         except:
             pass
         pass
-    print(image_dict.keys(), "Image_dict")
+    # print(image_dict.keys(), "Image_dict")
     return image_dict
 
 
