@@ -40,9 +40,9 @@ for orientation in ExifTags.TAGS.keys():
 
 
 
-class create_data(Dataset):
+class load_data(Dataset):
     #merge LoadImagesAndLabels from yolo and InferenceDataset from planercnn 
-    def __init__(self,yolo_params,planercnn_params,midas_params):
+    def __init__(self, planercnn_params, yolo_params, midas_params):
         #planercnn_params : self, options, config, image_list, camera, random=False
         #yolo_params : self, path, img_size=416, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
         #        cache_labels=True, cache_images=False, single_cls=False
@@ -274,8 +274,8 @@ class create_data(Dataset):
         self.depth_names=[]
         for im in self.img_files:
             im = im.split(os.sep)
-            im[3]= 'depth_images'
-            im[4] = im[4].replace(os.path.splitext(im[4])[-1], '.png')
+            im[3]= 'images'
+            im[4] = im[4].replace(os.path.splitext(im[4])[-1], '.jpg')
             im = os.sep.join(im)
             self.depth_names.append(im)
 
@@ -333,18 +333,18 @@ class create_data(Dataset):
         img_name = self.img_files[index] #vig
         depth_name = self.depth_names[index]
 
-        img_ip = utils.read_image(img_name)
+        img_ip = dp_utils.read_image(img_name)
         #print('img_ip',img_ip.shape)
         img_input = self.transform({"image": img_ip})["image"]
         #print('img_input',img_input)
 
 
 
-        #print('depth_name',depth_name)
+        print('depth_name',depth_name)
         depth_img = cv2.imread(depth_name,0)
         #depth_img = cv2.cvtColor(depth_img, cv2.COLOR_BGR2GRAY)
 
-        #print('depth_img',depth_img.shape)
+        print('depth_img',depth_img.shape)
 
         dp_data = [img_ip.shape,img_input,depth_img]
 
